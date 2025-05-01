@@ -1,6 +1,1038 @@
-git clone https://github.com/cxx1005/cxx1005.github.io.git
-cd cxx1005.github.io
-echo "高频词消消乐限制试错8词版" > index.html
-git add --all
-git commit -m "Initial commit"
-git push -u origin master
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>词汇消消乐-试炼模式</title>
+    <style>
+        body {
+            background-color: #FFF8E7;
+            margin: 0;
+            padding: 20px;
+            font-family: '微软雅黑', sans-serif;
+            text-align: center;
+        }
+
+        h1 {
+            color: #2C3E50;
+            font-size: 2.5em;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.2);
+            margin-bottom: 30px;
+        }
+
+        #statusBar {
+            display: flex;
+            justify-content: center;
+            gap: 30px;
+            margin: 20px;
+            flex-wrap: wrap;
+        }
+
+        .status-item {
+            padding: 10px 20px;
+            background: #f8f9fa;
+            border-radius: 10px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            min-width: 120px;
+        }
+
+        #gameBoard {
+            display: grid;
+            grid-template-columns: repeat(8, 1fr);
+            gap: 15px;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .bubble {
+            background: linear-gradient(145deg, rgba(255,255,255,0.2), transparent);
+            border-radius: 50%;
+            width: 120px;
+            height: 120px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            cursor: pointer;
+            transition: all 0.3s;
+            box-shadow: 5px 5px 15px rgba(0,0,0,0.2);
+            font-size: 1.2em;
+            color: white;
+            font-weight: bold;
+            text-shadow: 1px 1px 2px rgba(0,0,0,0.5);
+            user-select: none;
+        }
+
+        .bubble.selected {
+            transform: scale(1.1);
+            box-shadow: 0 0 15px rgba(255,255,255,0.8);
+        }
+
+        .bubble.error {
+            animation: shake 0.5s;
+            background-color: #FFEBEE !important;
+        }
+
+        @keyframes shake {
+            0% { transform: translateX(0); }
+            25% { transform: translateX(-5px); }
+            50% { transform: translateX(5px); }
+            75% { transform: translateX(-3px); }
+            100% { transform: translateX(0); }
+        }
+
+        #endScreen {
+            display: none;
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: white;
+            padding: 30px 50px;
+            border-radius: 20px;
+            box-shadow: 0 0 20px rgba(0,0,0,0.2);
+            text-align: center;
+            z-index: 1000;
+            max-width: 80%;
+        }
+
+        .restart-btn {
+            background-color: #4CAF50;
+            color: white;
+            padding: 12px 24px;
+            border: none;
+            border-radius: 25px;
+            cursor: pointer;
+            font-size: 1.1em;
+            transition: all 0.3s;
+            margin-top: 20px;
+        }
+
+        .restart-btn:hover {
+            background-color: #45a049;
+            transform: scale(1.05);
+        }
+
+        .error { color: #E74C3C; }
+        .warning { color: #F39C12; }
+        .success { color: #4CAF50; }
+    </style>
+</head>
+<body>
+    <audio id="bgm" loop>
+        <source src="消消乐背景音乐.mp3" type="audio/mpeg">
+    </audio>
+
+    <h1>词汇试炼场</h1>
+    <div id="statusBar">
+        <div class="status-item">
+            剩余时间: <span id="timer">60</span>秒
+        </div>
+        <div class="status-item">
+            剩余机会: <span id="errorsLeft">3</span>次
+        </div>
+        <div class="status-item">
+            已匹配: <span id="matchedCount">0</span>/8
+        </div>
+    </div>
+    <div id="gameBoard"></div>
+    <div id="endScreen">
+        <h2 id="resultMessage"></h2>
+        <p>最终成绩: <span id="finalScore">0</span> 组</p>
+        <button class="restart-btn" onclick="startNewGame()">重新挑战</button>
+    </div>
+
+    <script>
+        // 
+        const fullVocabulary = [
+               { en: "personal", ch: "私人的，个人的" },
+    { en: "tie", ch: "系，联系 | 关系" },
+    { en: "still", ch: "静止的 | 甚至，仍然" },
+    { en: "offer", ch: "提供，出（价）；愿意（做某事）" },
+    { en: "addition", ch: "增加" },
+    { en: "success", ch: "成功" },
+    { en: "produce", ch: "生产，引起 | 产品" },
+    { en: "expect", ch: "预料，预计；期待" },
+    { en: "cause", ch: "引起 | 原因；事业；目标" },
+    { en: "state", ch: "情形，状态 | 声明，陈述 | 国家的" },
+    { en: "manage", ch: "管理；设法做成（to）" },
+    { en: "directly", ch: "直接地" },
+    { en: "improve", ch: "改善，提高" },
+    { en: "wonder", ch: "奇迹 | 想知道；怀疑" },
+    { en: "present", ch: "当前的，出席的 | 呈现；赠送；出席 | 礼物；现在" },
+    { en: "underline", ch: "在...下面划线；强调" },
+    { en: "mislead", ch: "误导" },
+    { en: "complete", ch: "完成 | 完成的" },
+    { en: "lead", ch: "导致（to），带领；过（...的生活） | 领头位置" },
+    { en: "sensitive", ch: "敏感的" },
+    { en: "valuable", ch: "贵重的" },
+    { en: "courageous", ch: "勇敢的" },
+    { en: "tend", ch: "趋向，照顾（to）" },
+    { en: "matter", ch: "事情 | 要紧" },
+    { en: "realise", ch: "意识到，实现（梦想）" },
+    { en: "acceptable", ch: "可接受的" },
+    { en: "consider", ch: "考虑，认为" },
+    { en: "support", ch: "支持" },
+    { en: "fit", ch: "适宜的；健康的 | 安装(in)，适合" },
+    { en: "hang", ch: "悬挂" },
+    { en: "protect", ch: "保护" },
+    { en: "professional", ch: "专业的 | 职业，专业" },
+    { en: "widen", ch: "使变宽" },
+    { en: "require", ch: "要求" },
+    { en: "creative", ch: "创造性的" },
+    { en: "deal", ch: "处理（with） | 交易" },
+    { en: "popularity", ch: "普及，流行" },
+    { en: "attend", ch: "出席，关心（to）；处理(to)" },
+    { en: "prefer", ch: "更喜欢" },
+    { en: "wild", ch: "野生的" },
+    { en: "quality", ch: "质量，品质" },
+    { en: "perform", ch: "执行，表演" },
+    { en: "promise", ch: "诺言 | 允诺，答应" },
+    { en: "necessarily", ch: "必然地" },
+    { en: "store", ch: "储存 | 商店" },
+    { en: "general", ch: "普遍的" },
+    { en: "condition", ch: "情况，条件" },
+    { en: "vary", ch: "改变，不同" },
+    { en: "suffer", ch: "遭受(from)" },
+    { en: "speech", ch: "演讲" },
+    { en: "respect", ch: "尊敬，尊重 | 尊敬，尊重" },
+    { en: "disappoint", ch: "使失望" },
+    { en: "simplify", ch: "简化，使简单" },
+    { en: "raise", ch: "举起，筹集，提出" },
+    { en: "refer", ch: "涉及，提到；查阅（to）" },
+    { en: "achievement", ch: "成就" },
+    { en: "particular", ch: "特别的" },
+    { en: "prevent", ch: "阻止" },
+    { en: "regular", ch: "有规律的，定期的" },
+    { en: "connect", ch: "连接，联系(with)" },
+    { en: "subject", ch: "主题，实验对象 | 服从的" },
+    { en: "physical", ch: "物质的，身体的" },
+    { en: "check", ch: "支票，检查 | 核对" },
+    { en: "position", ch: "位置，立场 | 定位，安置" },
+    { en: "concern", ch: "关心(about)，涉及" },
+    { en: "force", ch: "强迫 | 力量" },
+    { en: "satisfy", ch: "使满意" },
+    { en: "organize", ch: "组织，安排" },
+    { en: "charge", ch: "费用，指控 | 要价(for)，管理，充电" },
+    { en: "favor", ch: "好意 | 偏爱" },
+    { en: "damage", ch: "损害 | 损害" },
+    { en: "publish", ch: "出版，发行" },
+    { en: "focus", ch: "焦点 | 聚焦(on)" },
+    { en: "affect", ch: "影响" },
+    { en: "feed", ch: "喂养(on)" },
+    { en: "weigh", ch: "称(重量)，重达" },
+    { en: "pressure", ch: "压力，压强" },
+    { en: "credit", ch: "信用" },
+    { en: "visible", ch: "可见的" },
+    { en: "operate", ch: "操作，经营，动手术" },
+    { en: "warn", ch: "警告" },
+    { en: "relate", ch: "有关联(to)，陈述" },
+    { en: "strength", ch: "力量" },
+    { en: "stress", ch: "强调 | 压力，强调" },
+    { en: "attack", ch: "攻击 | 攻击" },
+    { en: "determine", ch: "下决心" },
+    { en: "volunteer", ch: "志愿者 | (自愿)做" },
+    { en: "lack", ch: "缺乏 | 缺乏(of/in)" },
+    { en: "equipment", ch: "设备" },
+    { en: "expense", ch: "花费" },
+    { en: "deliver", ch: "递送，发表（演讲）" },
+    { en: "compare", ch: "比较(with)；比喻(to)" },
+    { en: "spread", ch: "延伸，传播" },
+    { en: "seek", ch: "寻找" },
+    { en: "distant", ch: "遥远的" },
+    { en: "original", ch: "原始的，最初的" },
+    { en: "impress", ch: "使...有印象(on)" },
+    { en: "remind", ch: "提醒(of)" },
+    { en: "communicate", ch: "交流(with)" },
+    { en: "range", ch: "范围 | 涉及(from...to...)" },
+    { en: "guidance", ch: "指导" },
+    { en: "avoid", ch: "避免" },
+    { en: "opportunity", ch: "机会" },
+    { en: "emotion", ch: "情绪" },
+    { en: "equal", ch: "相等的 | 等于(to)" },
+    { en: "contain", ch: "包含" },
+    { en: "hardly", ch: "几乎不" },
+    { en: "announce", ch: "宣布" },
+    { en: "reward", ch: "奖赏 | 报酬" },
+    { en: "desire", ch: "渴望 | 渴望" },
+    { en: "promote", ch: "促进，促销，升迁" },
+    { en: "gather", ch: "聚集 | 聚集" },
+    { en: "similarity", ch: "相似，类似" },
+    { en: "advance", ch: "前进 | 提前的" },
+    { en: "percent", ch: "百分比" },
+    { en: "character", ch: "个性，人物" },
+    { en: "frighten", ch: "使惊吓" },
+    { en: "accessible", ch: "易接近的；可得到的" },
+    { en: "potential", ch: "潜在的 | 潜力" },
+    { en: "review", ch: "复习 | 复习，评论" },
+    { en: "replace", ch: "取代" },
+    { en: "greedy", ch: "贪婪的" },
+    { en: "shock", ch: "震惊 | 使震惊" },
+    { en: "judge", ch: "判断 | 法官，裁判" },
+    { en: "praise", ch: "称赞 | 称赞" },
+    { en: "recover", ch: "恢复" },
+    { en: "confuse", ch: "使困惑" },
+    { en: "spot", ch: "地点 | 发现" },
+    { en: "attempt", ch: "企图，尝试(to) | 试图" },
+    { en: "available", ch: "可利用的(to)" },
+    { en: "destruction", ch: "破坏，毁灭" },
+    { en: "construct", ch: "建造，构造" },
+    { en: "function", ch: "功能 | 起作用" },
+    { en: "argument", ch: "观点(on/about)，争论" },
+    { en: "labor", ch: "劳力" },
+    { en: "private", ch: "私人的，秘密的" },
+    { en: "repeat", ch: "重复" },
+    { en: "spirit", ch: "精神" },
+    { en: "suppose", ch: "假设，认为" },
+    { en: "desert", ch: "沙漠 | 遗弃" },
+    { en: "exchange", ch: "交换 | 交换(for)" },
+    { en: "fairly", ch: "公正地，相当地" },
+    { en: "regret", ch: "后悔 | 后悔" },
+    { en: "strict", ch: "严格的(with)" },
+    { en: "fellow", ch: "同事，家伙" },
+    { en: "gradually", ch: "逐渐地" },
+    { en: "belief", ch: "信念，信仰" },
+    { en: "imagination", ch: "想象力" },
+    { en: "official", ch: "正式的；官方的" },
+    { en: "account", ch: "帐户，事情 | 说明（for）" },
+    { en: "persuade", ch: "说服" },
+    { en: "figure", ch: "人物 | 算出，领会(out)" },
+    { en: "seldom", ch: "很少" },
+    { en: "eager", ch: "渴望的(to)" },
+    { en: "recommend", ch: "推荐，建议" },
+    { en: "remove", ch: "移除" },
+    { en: "unique", ch: "唯一的" },
+    { en: "risk", ch: "冒...的危险(of) | 危险，风险" },
+    { en: "economic", ch: "经济的" },
+    { en: "pollution", ch: "污染" },
+    { en: "literature", ch: "文学" },
+    { en: "consume", ch: "消耗，消费" },
+    { en: "stick", ch: "粘住，坚持(to)" },
+    { en: "devote", ch: "致力于(to)" },
+    { en: "predict", ch: "预言" },
+    { en: "complain", ch: "抱怨(to/about)" },
+    { en: "annoy", ch: "使恼怒" },
+    { en: "apply", ch: "应用(to)，申请(for)" },
+    { en: "handle", ch: "处理" },
+    { en: "object", ch: "反对(to) | 目标，物体" },
+    { en: "select", ch: "挑选" },
+    { en: "opposite", ch: "相反的，对面的" },
+    { en: "solution", ch: "解决办法" },
+    { en: "struggle", ch: "斗争，挣扎 | 斗争，挣扎(against)" },
+    { en: "approach", ch: "靠近 | 途径，方法(to)" },
+    { en: "urgent", ch: "紧急的" },
+    { en: "delight", ch: "高兴" },
+    { en: "talent", ch: "天赋，才华" },
+    { en: "track", ch: "跟踪 | 小路" },
+    { en: "arrange", ch: "安排" },
+    { en: "wealth", ch: "财富" },
+    { en: "security", ch: "安全" },
+    { en: "entire", ch: "全部的" },
+    { en: "positive", ch: "积极的" },
+    { en: "rarely", ch: "很少" },
+    { en: "reflect", ch: "反射，反映" },
+    { en: "contact", ch: "接触，联系(with) | 接触，联系" },
+    { en: "hesitate", ch: "犹豫" },
+    { en: "permit", ch: "允许" },
+    { en: "rapid", ch: "迅速的" },
+    { en: "colleague", ch: "同事" },
+    { en: "conclude", ch: "总结" },
+    { en: "host", ch: "主人，主持人 | 主办，主持" },
+    { en: "version", ch: "版本" },
+    { en: "accommodation", ch: "住处，适应" },
+    { en: "possess", ch: "拥有" },
+    { en: "collection", ch: "收集" },
+    { en: "survive", ch: "幸存" },
+    { en: "feature", ch: "特征" },
+    { en: "appreciate", ch: "欣赏，感激" },
+    { en: "embarrass", ch: "使尴尬" },
+    { en: "profit", ch: "利润，利益 | 获利" },
+    { en: "ancient", ch: "古老的" },
+    { en: "historical", ch: "历史的" },
+    { en: "victim", ch: "受害者" },
+    { en: "broaden", ch: "变宽，扩大" },
+    { en: "plastic", ch: "塑料 | 可塑的" },
+    { en: "primary", ch: "主要的；首要的，初级的" },
+    { en: "reaction", ch: "反应(to)" },
+    { en: "represent", ch: "展示，代表" },
+    { en: "response", ch: "反应，响应(to)" },
+    { en: "surround", ch: "包围" },
+    { en: "average", ch: "平均的" },
+    { en: "smooth", ch: "使顺利，使光滑 | 顺利的，光滑的" },
+    { en: "cast", ch: "投射，掷" },
+    { en: "chemical", ch: "化学的 | 药品" },
+    { en: "prison", ch: "监狱" },
+    { en: "purchase", ch: "购买 | 购买" },
+    { en: "straight", ch: "直的，直接的" },
+    { en: "switch", ch: "转换（on）" },
+    { en: "treatment", ch: "对待，治疗" },
+    { en: "aware", ch: "意识到的(of)" },
+    { en: "narrow", ch: "（使）变窄 | 狭窄的" },
+    { en: "hire", ch: "雇请" },
+    { en: "shoulder", ch: "肩膀 | 肩负" },
+    { en: "content", ch: "内容，目录 | 满意的(with)" },
+    { en: "contribute", ch: "贡献，致力于(to)" },
+    { en: "concept", ch: "概念" },
+    { en: "concert", ch: "音乐会" },
+    { en: "conflict", ch: "冲突" },
+    { en: "decade", ch: "十年" },
+    { en: "sincere", ch: "真诚的" },
+    { en: "release", ch: "释放 | 释放" },
+    { en: "constant", ch: "持续不断的" },
+    { en: "conduct", ch: "实施" },
+    { en: "overcome", ch: "战胜，克服" },
+    { en: "recycle", ch: "循环" },
+    { en: "translate", ch: "翻译" },
+    { en: "fond", ch: "喜欢的(of)" },
+    { en: "grateful", ch: "感激的(to)" },
+    { en: "guard", ch: "保卫 | 看守" },
+    { en: "motivate", ch: "激发" },
+    { en: "pause", ch: "停顿 | 暂停" },
+    { en: "celebrate", ch: "庆祝" },
+    { en: "trick", ch: "欺骗 | 诡计" },
+    { en: "anxiety", ch: "焦虑" },
+    { en: "debate", ch: "辩论 | 辩论" },
+    { en: "delay", ch: "推迟 | 耽搁" },
+    { en: "deserve", ch: "值得" },
+    { en: "schedule", ch: "时间表 | 安排，预定" },
+    { en: "specific", ch: "特定的，具体的" },
+    { en: "concentrate", ch: "专心，集中(on)" },
+    { en: "quit", ch: "停止，放弃" },
+    { en: "stare", ch: "凝视(at)" },
+    { en: "sympathy", ch: "同情" },
+    { en: "alternative", ch: "供选择的 | 替换物" },
+    { en: "analyze", ch: "分析" },
+    { en: "ancestor", ch: "祖宗" },
+    { en: "aspect", ch: "方面" },
+    { en: "disability", ch: "残疾" },
+    { en: "admire", ch: "钦佩，羡慕" },
+    { en: "adolescent", ch: "青春期的 | 青少年" },
+    { en: "faithfully", ch: "忠实地" },
+    { en: "previous", ch: "以前的" },
+    { en: "reliable", ch: "可靠的" },
+    { en: "legal", ch: "合法的，法律的" },
+    { en: "compete", ch: "比赛(with/for/against)" },
+    { en: "symbol", ch: "象征" },
+    { en: "trap", ch: "陷阱" },
+    { en: "apologize", ch: "道歉(to sb for sth)" },
+    { en: "mistaken", ch: "错误的" },
+    { en: "vehicle", ch: "车辆，交通工具" },
+    { en: "brief", ch: "短暂的，简短的" },
+    { en: "sharp", ch: "急剧的，锋利的，灵敏的" },
+    { en: "ordinary", ch: "平凡的，普通的" },
+    { en: "absorb", ch: "吸收，吸引" },
+    { en: "ceremony", ch: "典礼" },
+    { en: "maintain", ch: "维持" },
+    { en: "consequence", ch: "后果" },
+    { en: "citizen", ch: "市民" },
+    { en: "violence", ch: "暴力" },
+    { en: "bid", ch: "出价，投标" },
+    { en: "bitter", ch: "苦的，痛苦的" },
+    { en: "shame", ch: "羞愧" },
+    { en: "bury", ch: "埋葬" },
+    { en: "accurate", ch: "精确的" },
+    { en: "adapt", ch: "适应(to)，改编" },
+    { en: "regardless", ch: "不顾(of)" },
+    { en: "commercial", ch: "商业的" },
+    { en: "confidence", ch: "信心" },
+    { en: "amaze", ch: "使吃惊" },
+    { en: "amuse", ch: "娱乐" },
+    { en: "attach", ch: "附上，系上(to)" },
+    { en: "typical", ch: "特有的，典型的" },
+    { en: "negative", ch: "消极的，负面的" },
+    { en: "species", ch: "种类，（单复同）物种" },
+    { en: "occasion", ch: "场合，时机" },
+    { en: "cautious", ch: "谨慎的，小心的" },
+    { en: "engage", ch: "从事(in)，订婚" },
+    { en: "expose", ch: "揭露，暴露(to)" },
+    { en: "political", ch: "政治的" },
+    { en: "convenient", ch: "方便的" },
+    { en: "assess", ch: "评定，评估" },
+    { en: "astonish", ch: "使惊讶" },
+    { en: "guarantee", ch: "保证 | 保证" },
+    { en: "decline", ch: "下降，拒绝 | 衰落" },
+    { en: "background", ch: "背景" },
+    { en: "mysterious", ch: "神秘的" },
+    { en: "block", ch: "街区 | 阻塞" },
+    { en: "emergency", ch: "突发事件" },
+    { en: "sink", ch: "下沉(into)" },
+    { en: "abandon", ch: "放弃，抛弃" },
+    { en: "adjust", ch: "调节，使适应(to)" },
+    { en: "capital", ch: "首都，资本 | 大写的，资本的" },
+    { en: "charm", ch: "魅力" },
+    { en: "evaluate", ch: "评价" },
+    { en: "exploit", ch: "利用，开发" },
+    { en: "poison", ch: "毒害" },
+    { en: "migrate", ch: "迁移，迁徙" },
+    { en: "current", ch: "现在的" },
+    { en: "combine", ch: "结合(with)" },
+    { en: "sweep", ch: "打扫，席卷" },
+    { en: "trade", ch: "贸易" },
+    { en: "appointment", ch: "约会" },
+    { en: "guilty", ch: "内疚的(of)，有罪的" },
+    { en: "moral", ch: "道德的" },
+    { en: "wander", ch: "漫步，闲逛" },
+    { en: "charity", ch: "慈善" },
+    { en: "jog", ch: "慢跑" },
+    { en: "ensure", ch: "确保" },
+    { en: "poverty", ch: "贫困" },
+    { en: "precise", ch: "精确的" },
+    { en: "conservation", ch: "保护，保存" },
+    { en: "consult", ch: "咨询，请教" },
+    { en: "crime", ch: "罪行" },
+    { en: "complex", ch: "复杂的" },
+    { en: "forbid", ch: "禁止" },
+    { en: "federal", ch: "联邦的" },
+    { en: "gap", ch: "缺口，差距" },
+    { en: "apparent", ch: "明显的" },
+    { en: "unexpected", ch: "想不到的，意外的" },
+    { en: "unwilling", ch: "不愿意的" },
+    { en: "habitat", ch: "栖息地，产地" },
+    { en: "retire", ch: "退休 | 退休" },
+    { en: "defend", ch: "保卫，辩护" },
+    { en: "withdraw", ch: "撤回，取回" },
+    { en: "participate", ch: "参加，参与(in)" },
+    { en: "enable", ch: "使能够" },
+    { en: "accompany", ch: "陪伴" },
+    { en: "chief", ch: "主要的，首要的 | 首领" },
+    { en: "explode", ch: "爆炸" },
+    { en: "precious", ch: "珍贵的" },
+    { en: "register", ch: "注册，登记" },
+    { en: "remark", ch: "评论 | 评论" },
+    { en: "curiosity", ch: "好奇心" },
+    { en: "theory", ch: "理论" },
+    { en: "thick", ch: "厚的" },
+    { en: "affordable", ch: "支付得起的" },
+    { en: "atmosphere", ch: "大气，氛围" },
+    { en: "household", ch: "家庭" },
+    { en: "humo(u)r", ch: "幽默" },
+    { en: "whisper", ch: "耳语，私语" },
+    { en: "wipe", ch: "擦" },
+    { en: "optimistic", ch: "乐观的" },
+    { en: "significant", ch: "重要的" },
+    { en: "region", ch: "地区，范围" },
+    { en: "addiction", ch: "上瘾(to)" },
+    { en: "facility", ch: "设施" },
+    { en: "recall", ch: "回忆" },
+    { en: "remote", ch: "偏远的" },
+    { en: "resist", ch: "抵制，抵抗" },
+    { en: "tax", ch: "税" },
+    { en: "fascinate", ch: "使入迷" },
+    { en: "ambition", ch: "雄心" },
+    { en: "appeal", ch: "呼吁 | 吸引，呼吁(to)" },
+    { en: "associate", ch: "联系(with)" },
+    { en: "declare", ch: "声明" },
+    { en: "minor", ch: "较小的，次要的" },
+    { en: "severe", ch: "严重的" },
+    { en: "slip", ch: "滑倒，溜走" },
+    { en: "academic", ch: "学术的 | 教授" },
+    { en: "pile", ch: "堆，大量" },
+    { en: "pirate", ch: "海盗，盗版者" },
+    { en: "chain", ch: "链条，一连串" },
+    { en: "essential", ch: "本质的" },
+    { en: "psychology", ch: "心理，心理学" },
+    { en: "reserve", ch: "预定，保留 | 自然保护区" },
+    { en: "resort", ch: "(度假）胜地" },
+    { en: "consist", ch: "由...组成(of/ in)" },
+    { en: "contest", ch: "竞赛 | 竞赛" },
+    { en: "command", ch: "命令，获得" },
+    { en: "comprehension", ch: "理解" },
+    { en: "tough", ch: "艰难的，棘手的" },
+    { en: "trend", ch: "趋势 | 倾向" },
+    { en: "assignment", ch: "分配，任务" },
+    { en: "assistant", ch: "助手" },
+    { en: "bargain", ch: "便宜货 | 讨价还价" },
+    { en: "destination", ch: "目的地" },
+    { en: "adopt", ch: "采用，收养" },
+    { en: "cheat", ch: "骗子 | 欺骗" },
+    { en: "cheque", ch: "支票" },
+    { en: "preserve", ch: "保护，保存" },
+    { en: "propose", ch: "计划，提议，求婚" },
+    { en: "manufacture", ch: "制造，制造业 | 制造" },
+    { en: "crisis", ch: "危机" },
+    { en: "confirm", ch: "确定" },
+    { en: "foundation", ch: "基金会，基础" },
+    { en: "appropriate", ch: "适当的" },
+    { en: "approve", ch: "赞同，同意(of)" },
+    { en: "astronaut", ch: "宇航员" },
+    { en: "grant", ch: "授予，认为" },
+    { en: "routine", ch: "例行公事 | 常规的，例行的" },
+    { en: "impractical", ch: "不切实际的" },
+    { en: "distinguish", ch: "区别(from)" },
+    { en: "vital", ch: "至关重要的" },
+    { en: "absence", ch: "缺乏，缺席" },
+    { en: "peak", ch: "山峰，顶端" },
+    { en: "temporary", ch: "暂时的" },
+    { en: "architect", ch: "建筑师" },
+    { en: "universal", ch: "普遍的" },
+    { en: "grasp", ch: "领会，抓住 | 抓住，领会" },
+    { en: "decrease", ch: "降低 | 降低" },
+    { en: "beneficial", ch: "有益的(to)" },
+    { en: "define", ch: "定义" },
+    { en: "vast", ch: "广阔的" },
+    { en: "witness", ch: "目击 | 目击者，证人" },
+    { en: "wrap", ch: "包，裹" },
+    { en: "candidate", ch: "候选人" },
+    { en: "affair", ch: "事件" },
+    { en: "acquire", ch: "获得，学到" },
+    { en: "certificate", ch: "证书，执照" },
+    { en: "champion", ch: "冠军 | 保卫" },
+    { en: "estimate", ch: "估计" },
+    { en: "exhausted", ch: "精疲力竭的" },
+    { en: "refresh", ch: "恢复精神" },
+    { en: "contract", ch: "合同 | 订合同" },
+    { en: "critical", ch: "批评的，决定性的" },
+    { en: "civil", ch: "国内的，公民的" },
+    { en: "compose", ch: "组成，编排" },
+    { en: "splendid", ch: "极好的" },
+    { en: "strike", ch: "打 | 罢工" },
+    { en: "threaten", ch: "威胁" },
+    { en: "tragedy", ch: "悲剧" },
+    { en: "transform", ch: "转换" },
+    { en: "trial", ch: "试验 | 审讯" },
+    { en: "fantasy", ch: "幻想" },
+    { en: "fetch", ch: "取来" },
+    { en: "frequently", ch: "频繁地" },
+    { en: "glance", ch: "扫视(at) | 一瞥" },
+    { en: "assume", ch: "假定，设想" },
+    { en: "uncertain", ch: "不确定的" },
+    { en: "urban", ch: "城市的" },
+    { en: "harbour", ch: "港口" },
+    { en: "harmony", ch: "和谐" },
+    { en: "identify", ch: "识别，鉴定" },
+    { en: "impact", ch: "影响" },
+    { en: "distinct", ch: "不同的" },
+    { en: "scratch", ch: "抓" },
+    { en: "burst", ch: "爆发(into/ out)，闯入" },
+    { en: "cancel", ch: "取消" },
+    { en: "skip", ch: "跳过" },
+    { en: "pedestrian", ch: "路人" },
+    { en: "peer", ch: "同辈 | 凝视" },
+    { en: "casual", ch: "不经心的，偶然的" },
+    { en: "erupt", ch: "喷发" },
+    { en: "principle", ch: "原则" },
+    { en: "loose", ch: "宽松的，松散的" },
+    { en: "correspond", ch: "对应(to)" },
+    { en: "advocate", ch: "提倡" },
+    { en: "ashamed", ch: "感到惭愧的(of)" },
+    { en: "automatic", ch: "自动的" },
+    { en: "decorate", ch: "装饰" },
+    { en: "rough", ch: "粗糙的，艰难的" },
+    { en: "honorable", ch: "光荣的" },
+    { en: "illegal", ch: "非法的" },
+    { en: "negotiate", ch: "协商(with)" },
+    { en: "vivid", ch: "生动的" },
+    { en: "scan", ch: "扫描，浏览" },
+    { en: "sculpture", ch: "雕塑" },
+    { en: "selfish", ch: "自私的" },
+    { en: "burden", ch: "负担 | 使...负重" },
+    { en: "absolute", ch: "绝对的，完全的" },
+    { en: "accomplish", ch: "实现，完成" },
+    { en: "accuse", ch: "控告(of)，指责" },
+    { en: "administration", ch: "管理，行政" },
+    { en: "perception", ch: "观念，洞察力" },
+    { en: "radiation", ch: "辐射" },
+    { en: "reject", ch: "拒绝，排斥" },
+    { en: "mild", ch: "轻微的，温和的" },
+    { en: "symptom", ch: "征兆，症状" },
+    { en: "treasure", ch: "财富" },
+    { en: "tuition", ch: "学费" },
+    { en: "foster", ch: "培养 | 收养的" },
+    { en: "freezing", ch: "冰冻的" },
+    { en: "annual", ch: "每年的" },
+    { en: "antique", ch: "古老的 | 古董" },
+    { en: "arise", ch: "出现" },
+    { en: "unemployment", ch: "失业" },
+    { en: "gravity", ch: "重力" },
+    { en: "rural", ch: "农村的" },
+    { en: "scare", ch: "受惊吓" },
+    { en: "murder", ch: "谋杀 | 谋杀" },
+    { en: "horizon", ch: "地平线" },
+    { en: "noble", ch: "高贵的，贵族的" },
+    { en: "desperate", ch: "绝望的" },
+    { en: "weaken", ch: "削弱" },
+    { en: "seize", ch: "抓住" },
+    { en: "acknowledge", ch: "承认" },
+    { en: "payment", ch: "支付，报酬" },
+    { en: "priority", ch: "优先" },
+    { en: "procedure", ch: "程序" },
+    { en: "quote", ch: "引用 | 引述" },
+    { en: "luxury", ch: "豪华，奢侈" },
+    { en: "contemporary", ch: "当代的" },
+    { en: "cooperate", ch: "合作(with)" },
+    { en: "classify", ch: "分类" },
+    { en: "tight", ch: "紧的" },
+    { en: "tropical", ch: "热带的" },
+    { en: "fierce", ch: "强烈的，凶猛的" },
+    { en: "flexible", ch: "灵活的" },
+    { en: "fortunate", ch: "幸运的" },
+    { en: "giant", ch: "巨大的" },
+    { en: "aggressive", ch: "好斗的，上进的" },
+    { en: "anniversary", ch: "周年纪念" },
+    { en: "undoubtedly", ch: "无疑地" },
+    { en: "deed", ch: "行为" },
+    { en: "barely", ch: "几乎不" },
+    { en: "rival", ch: "对手 | 竞争" },
+    { en: "salary", ch: "薪水" },
+    { en: "hurricane", ch: "飓风" },
+    { en: "demonstrate", ch: "证明，演示" },
+    { en: "beneath", ch: "在...之下" },
+    { en: "brilliant", ch: "卓越的，杰出的" },
+    { en: "shortcoming", ch: "缺点" },
+    { en: "optional", ch: "任选的" },
+    { en: "paradise", ch: "天堂" },
+    { en: "emphasis", ch: "强调(on)，重点" },
+    { en: "calculate", ch: "计算" },
+    { en: "permanent", ch: "永久的" },
+    { en: "capture", ch: "捕获，占领" },
+    { en: "justice", ch: "正义" },
+    { en: "keen", ch: "热衷的(on)；敏锐的" },
+    { en: "pure", ch: "纯的，纯粹的" },
+    { en: "pursue", ch: "追求" },
+    { en: "reform", ch: "改革 | 改革" },
+    { en: "legend", ch: "传奇" },
+    { en: "clarify", ch: "阐明" },
+    { en: "subordinate", ch: "下级的，次要的" },
+    { en: "swallow", ch: "吞下" },
+    { en: "transfer", ch: "转移" },
+    { en: "trigger", ch: "触发" },
+    { en: "fasten", ch: "使固定，系(to)" },
+    { en: "fulfill", ch: "完成" },
+    { en: "arrest", ch: "逮捕" },
+    { en: "unbelievable", ch: "难以臵信的" },
+    { en: "unconscious", ch: "无知觉(意识)的" },
+    { en: "unforgettable", ch: "难忘的" },
+    { en: "valid", ch: "有效的" },
+    { en: "deadline", ch: "截止时间" },
+    { en: "restore", ch: "修复，恢复" },
+    { en: "reveal", ch: "显示，表明" },
+    { en: "immigrant", ch: "移民" },
+    { en: "opponent", ch: "对手" },
+    { en: "shrink", ch: "缩水，收缩" },
+    { en: "skeptical", ch: "怀疑的" },
+    { en: "abstract", ch: "抽象的，理论的" },
+    { en: "abuse", ch: "滥用 | 滥用" },
+    { en: "accumulate", ch: "积累" },
+    { en: "accustom", ch: "使习惯(to)" },
+    { en: "pesticide", ch: "杀虫剂" },
+    { en: "capability", ch: "能力" },
+    { en: "cater", ch: "迎合（for)" },
+    { en: "fancy", ch: "想象，喜欢" },
+    { en: "polish", ch: "磨光，完善" },
+    { en: "portable", ch: "手提式的" },
+    { en: "protest", ch: "抗议(against)" },
+    { en: "stimulus", ch: "刺激" },
+    { en: "summarize", ch: "概述" },
+    { en: "superior", ch: "上层的，较高的(to)" },
+    { en: "surgery", ch: "外科手术" },
+    { en: "thoroughly", ch: "彻底地" },
+    { en: "trail", ch: "小径" },
+    { en: "tremble", ch: "发抖" },
+    { en: "format", ch: "板式 | 设计" },
+    { en: "fundamental", ch: "基本的 | 基础" },
+    { en: "anonymous", ch: "匿名的" },
+    { en: "appetite", ch: "食欲(for)，嗜好" },
+    { en: "arouse", ch: "引起" },
+    { en: "awful", ch: "糟糕的" },
+    { en: "vain", ch: "徒劳的(in ~ 徒劳无功)" },
+    { en: "restless", ch: "不安的" },
+    { en: "reverse", ch: "逆转 | 相反的" },
+    { en: "moderate", ch: "适度的" },
+    { en: "offence", ch: "冒犯，犯罪" },
+    { en: "delicate", ch: "脆弱的，精细的" },
+    { en: "wag", ch: "(狗)摇摆(尾巴) | 摇摆" },
+    { en: "breakthrough", ch: "突破" },
+    { en: "reluctant", ch: "不情愿的，勉强的" },
+    { en: "accent", ch: "口音，重音" },
+    { en: "adequate", ch: "足够的" },
+    { en: "pavement", ch: "人行道" },
+    { en: "prejudice", ch: "偏见" },
+    { en: "prosperity", ch: "繁荣，兴旺" },
+    { en: "resemble", ch: "与...相似" },
+    { en: "resolution", ch: "解决，决心" },
+    { en: "mature", ch: "成熟的" },
+    { en: "latter", ch: "后者的" },
+    { en: "lean", ch: "倚，倾斜" },
+    { en: "compound", ch: "化合物" },
+    { en: "tolerate", ch: "容忍，忍受" },
+    { en: "transmission", ch: "传输" },
+    { en: "approximately", ch: "大约地，近似地" },
+    { en: "artificial", ch: "人造的" },
+    { en: "athletic", ch: "运动的，健壮的" },
+    { en: "awkward", ch: "尴尬的" },
+    { en: "damp", ch: "潮湿的" },
+    { en: "dash", ch: "猛冲 | 猛冲" },
+    { en: "restrict", ch: "限制" },
+    { en: "sacrifice", ch: "牺牲(for) | 祭品" },
+    { en: "minimize", ch: "使减(缩)小到最低" },
+    { en: "miracle", ch: "奇迹" },
+    { en: "multiple", ch: "多种多样的" },
+    { en: "neglect", ch: "忽视，忽略" },
+    { en: "notorious", ch: "臭名昭著的" },
+    { en: "degrade", ch: "降解，退化" },
+    { en: "depart", ch: "离开，死亡" },
+    { en: "accelerate", ch: "加速" },
+    { en: "adore", ch: "爱慕，崇拜" },
+    { en: "perspective", ch: "看法" },
+    { en: "category", ch: "种类" },
+    { en: "exclude", ch: "排除" },
+    { en: "pregnant", ch: "怀孕的" },
+    { en: "random", ch: "随机的 (at ~ 随机地)" },
+    { en: "rebel", ch: "造反 | 造反者" },
+    { en: "leak", ch: "渗出，泄露" },
+    { en: "starve", ch: "挨饿" },
+    { en: "sting", ch: "叮" },
+    { en: "sustainable", ch: "可持续的" },
+    { en: "temptation", ch: "诱惑" },
+    { en: "tiresome", ch: "令人厌倦的" },
+    { en: "tourism", ch: "旅游业" },
+    { en: "transition", ch: "过渡，转变" },
+    { en: "allocate", ch: "分配" },
+    { en: "angle", ch: "角度" },
+    { en: "aptitude", ch: "潜能" },
+    { en: "assertive", ch: "坚定的" },
+    { en: "attribute", ch: "把...归于(to) | 品质" },
+    { en: "decisive", ch: "决定性的" },
+    { en: "retain", ch: "保持，保留" },
+    { en: "retreat", ch: "减少，撤退 | 撤退" },
+    { en: "miserable", ch: "悲惨的" },
+    { en: "illusion", ch: "错觉" },
+    { en: "numerous", ch: "许多的" },
+    { en: "defect", ch: "缺陷" },
+    { en: "deliberately", ch: "故意地" },
+    { en: "democratic", ch: "民主的" },
+    { en: "demolition", ch: "破坏，毁坏" },
+    { en: "boundary", ch: "边界，分界线" },
+    { en: "slim", ch: "苗条的 | 变苗条" },
+    { en: "abnormal", ch: "不正常的" },
+    { en: "abundant", ch: "丰富的" },
+    { en: "persist", ch: "坚持(in)" },
+    { en: "cherish", ch: "珍爱" },
+    { en: "lately", ch: "最近" },
+    { en: "exclaim", ch: "呼喊" },
+    { en: "lighten", ch: "照亮" },
+    { en: "conscience", ch: "良心" },
+    { en: "time-consuming", ch: "耗费时间的" },
+    { en: "ambiguous", ch: "模棱两可的" },
+    { en: "applause", ch: "鼓掌" },
+    { en: "assemble", ch: "聚集" },
+    { en: "attain", ch: "获得" },
+    { en: "vacant", ch: "空的" },
+    { en: "deceive", ch: "欺骗" },
+    { en: "bankrupt", ch: "破产的" },
+    { en: "restrain", ch: "抑制" },
+    { en: "resume", ch: "简历 | 继续" },
+    { en: "revenge", ch: "报复 | 报复" },
+    { en: "revive", ch: "复苏" },
+    { en: "modify", ch: "修饰，更改" },
+    { en: "obesity", ch: "肥胖" },
+    { en: "delete", ch: "删除" },
+    { en: "volatile", ch: "不稳定的，易变的" },
+    { en: "bound", ch: "必定的(to)" },
+    { en: "worthwhile", ch: "值得(做)的" },
+    { en: "overwhelm", ch: "打击，压倒" },
+    { en: "simulate", ch: "假装，模仿" },
+    { en: "simultaneously", ch: "同时地" }
+        ];
+
+        let gameState = {
+            selected: [],
+            errors: 0,
+            matched: 0,
+            timeLeft: 60,
+            totalPairs: 8,
+            maxErrors: 3,
+            gameActive: false
+        };
+
+        let gameLoop;
+
+        function startNewGame() {
+            // 重置游戏状态
+            gameState = {
+                selected: [],
+                errors: 0,
+                matched: 0,
+                timeLeft: 60,
+                totalPairs: 8,
+                maxErrors: 3,
+                gameActive: true
+            };
+            
+            // 清除之前的游戏循环
+            clearInterval(gameLoop);
+            
+            // 初始化界面
+            document.getElementById('endScreen').style.display = 'none';
+            updateStatus();
+            createGameBoard();
+            
+            // 尝试播放背景音乐
+            document.getElementById('bgm').play().catch(e => {
+                console.log("自动播放被阻止:", e);
+            });
+
+            // 启动游戏循环
+            gameLoop = setInterval(() => {
+                gameState.timeLeft--;
+                updateStatus();
+                
+                if (gameState.timeLeft <= 0) {
+                    gameOver("时间到！");
+                }
+            }, 1000);
+        }
+
+        function createGameBoard() {
+            const board = document.getElementById('gameBoard');
+            board.innerHTML = '';
+            
+            // 随机选择词汇
+            const shuffled = [...fullVocabulary]
+                .sort(() => Math.random() - 0.5)
+                .slice(0, gameState.totalPairs);
+            
+            // 创建配对词汇
+            const allWords = [];
+            shuffled.forEach(word => {
+                allWords.push({ text: word.en, pair: word.ch });
+                allWords.push({ text: word.ch, pair: word.en });
+            });
+
+            // 打乱顺序
+            allWords.sort(() => Math.random() - 0.5);
+
+            // 创建泡泡
+            allWords.forEach(word => {
+                const bubble = document.createElement('div');
+                bubble.className = 'bubble';
+                bubble.textContent = word.text;
+                bubble.dataset.pair = word.pair;
+                
+                // 随机颜色
+                const hue = Math.floor(Math.random() * 360);
+                bubble.style.backgroundColor = `hsl(${hue}, 70%, 60%)`;
+                
+                bubble.addEventListener('click', handleBubbleClick);
+                board.appendChild(bubble);
+            });
+        }
+
+        function handleBubbleClick(e) {
+            if (!gameState.gameActive) return;
+            
+            const bubble = e.target;
+            
+            // 如果泡泡已经消失或已被选中，则忽略点击
+            if (bubble.style.opacity === '0' || gameState.selected.includes(bubble)) return;
+
+            // 播放点击音效
+            new Audio('泡泡音.mp3').play().catch(() => {});
+            
+            // 选中泡泡
+            bubble.classList.add('selected');
+            gameState.selected.push(bubble);
+
+            // 如果选中了两个泡泡，检查是否匹配
+            if (gameState.selected.length === 2) {
+                checkMatch();
+            }
+        }
+
+        function checkMatch() {
+            const [first, second] = gameState.selected;
+            const isMatch = first.dataset.pair === second.textContent && 
+                          second.dataset.pair === first.textContent;
+
+            if (isMatch) {
+                // 匹配成功
+                gameState.matched++;
+                gameState.errors = 0; // 重置错误计数
+                
+                // 消失动画
+                first.style.opacity = '0';
+                second.style.opacity = '0';
+                
+                // 检查是否完成所有匹配
+                if (gameState.matched === gameState.totalPairs) {
+                    gameOver("挑战成功！");
+                }
+            } else {
+                // 匹配失败
+                gameState.errors++;
+                
+                // 错误动画
+                gameState.selected.forEach(b => {
+                    b.classList.add('error');
+                    setTimeout(() => {
+                        b.classList.remove('selected', 'error');
+                    }, 800);
+                });
+                
+                // 检查是否达到最大错误次数
+                if (gameState.errors >= gameState.maxErrors) {
+                    gameOver("错误次数用尽！");
+                    return;
+                }
+            }
+
+            // 清空选中状态
+            gameState.selected = [];
+            updateStatus();
+        }
+
+        function gameOver(reason) {
+            gameState.gameActive = false;
+            clearInterval(gameLoop);
+            
+            // 设置结束消息
+            const messages = {
+                "挑战成功！": {
+                    text: "🎉 恭喜完成所有匹配！",
+                    class: "success"
+                },
+                "时间到！": {
+                    text: "⌛ 时间用尽！",
+                    class: "warning"
+                },
+                "错误次数用尽！": {
+                    text: "💥 连续错误三次！",
+                    class: "error"
+                }
+            };
+            
+            const result = messages[reason];
+            const resultElement = document.getElementById('resultMessage');
+            resultElement.textContent = result.text;
+            resultElement.className = result.class;
+            
+            // 显示最终成绩
+            document.getElementById('finalScore').textContent = gameState.matched;
+            
+            // 显示结束界面
+            document.getElementById('endScreen').style.display = 'block';
+        }
+
+        function updateStatus() {
+            // 更新时间显示
+            document.getElementById('timer').textContent = gameState.timeLeft;
+            
+            // 更新错误次数显示
+            const errorsLeft = gameState.maxErrors - gameState.errors;
+            document.getElementById('errorsLeft').textContent = errorsLeft;
+            
+            // 根据剩余错误次数更新颜色
+            const errorDisplay = document.getElementById('errorsLeft').parentElement;
+            errorDisplay.className = `status-item ${
+                errorsLeft <= 1 ? 'error' : 
+                errorsLeft <= 2 ? 'warning' : ''
+            }`;
+            
+            // 更新匹配计数
+            document.getElementById('matchedCount').textContent = gameState.matched;
+        }
+
+        // 初始化游戏
+        startNewGame();
+    </script>
+</body>
+</html>
